@@ -1,66 +1,95 @@
 # Graph-based POS-tagging for low resource languages
-# Part 2: POS projection & induction
+# Part 4+5: POS projection & POS induction
 
 # Alexandra Arkut, Janosch Haber, Muriel Hol, Victor Milewski
-# v.0.01 - 2016-11-22
+# v.0.3 - 2016-11-22
 
-# TODO: Complete with coarse universal tag set
-POS_TAGS = ['N', 'V', 'ADJ']
-NUMBER_TAGS = 3
+POS_TAGS = ['NOUN', 'VERB', 'ADJ', 'ADV', 'PRON', 'DET', 'ADP', 'NUM', 'CONJ', 'PRT', 'PUNC', 'X']
+NUMBER_TAGS = len(POS_TAGS)
 
 UPDATE_ITERATIONS = 10
 NU = 0,000002
+TAU = 0.02
 
 UNIFORM_PROB = 1/NUMBER_TAGS
-UNIFORM = {'N' : UNIFORM_PROB, 'V' : UNIFORM_PROB, 'ADJ' : UNIFORM_PROB}
-
-class Vertex(object):
-    """Vertex of the bilingual graph"""
-
-    def __init__(self, neighbors, weights):
-        super(Vertex, self).__init__()
-        self.neighbors = neighbors
-        # weights[neigbhor] = w_i_j
-        self.weights = weights
+UNIFORM = {}
+for tag in POS_TAGS:
+    UNIFORM[tag] = UNIFORM_PROB
 
 
-class PeripheralVertex(Vertex):
-    """Peripheral vertex of the target language graph"""
-
-    def __init__(self, middleWord, distribution):
-        super(PeripheralVertex, self).__init__()
-        self.middleWord = middleWord
-        self.distribution = distribution
-
-
-class Word(object):
-    """Word in the target language"""
+class SourceVertex(object):
+    """Vertex of the source language graph"""
 
     def __init__(self, token, tag):
-        super(Word, self).__init__()
+        super(SourceVertex, self).__init__()
         self.token = token
         self.tag = tag
 
 
+class TargetVertex(object):
+    """Vertex of the target language graph"""
+
+    def __init__(self, trigram):
+        super(TargetVertex, self).__init__()
+        self.token = trigram[1]
+        self.left = trigram[0]
+        self.right = trigram[2]
+
+        # list of pointers to the 5 vertices with the highest feature similarity score.
+        self.neighbors = []
+        # dictionary that takes a neighbor pointer as key and the similarity feature measure
+        self.weights = {}
+        # dictionary that takes the 12 universal tags as keys and the corresponding probability as value
+        self.tag_distribution = {}
+
+class PeripheralTargetVertex(TargetVertex):
+    """Peripheral vertex of the target language graph"""
+
+    def __init__(self, targetVertex, sourceVertex):
+        super(PeripheralTargetVertex, self).__init__()
+        self.token = targetVertex.token
+        self.left = targetVertex.left
+        self.right = targetVertex.right
+
+        # list of pointers to the 5 vertices with the highest feature similarity score.
+        self.neighbors = []
+        # dictionary that takes a neighbor pointer as key and the similarity feature measure
+        self.weights = {}
+        # dictionary that takes the 12 universal tags as keys and the corresponding probability as value
+        self.tag_distribution = {}
+        # pointer to the source language word that the middle word is algined to
+        self.aligned = sourceVertex
+
+
 # 4 - POS Projection
-def POS_projection():
+def POS_projection(graph):
     # Transfer POS tags from the source side of the bilingual graph to the peripheral vertices Vfl of the target language
-    projectTags()
+    projectTags(graph)
     # Propagate labels through the target language graph
-    propagateTags()
+    propagateTags(graph)
 
 
-# Transfer POS tags from the source side of the bilingual graph to the peripheral vertices Vfl of the target language
-def projectTags():
-    Vfl = collectPeripheralVertices()
-    return calculateLabelDistribution(Vfl)
+# 5 - POS Induction
+def POS_induction():
+    # Compute tag probabilities for foreign word types
+    wordTypeTagProbs = calcTagProbs()
+    # Remove tags with below-threshold probablities
+    wordTagProbs = threshold(wordTypeTagProbs)
+    # Induce tags for target language vertices
+    runInductionModel()
 
 
-# Propagate labels through the target language graph
-def propagateTags():
-    Vf = collectInternalVertices()
+# Transfers POS tags from the source side of the bilingual graph to the peripheral vertices Vfl of the target language
+def projectTags(graph):
+    vfl = collectPeripheralVertices(graph)
+    return calculateLabelDistribution(vfl)
+
+
+# Propagates labels through the target language graph
+def propagateTags(graph):
+    vf = collectInternalVertices(graph)
     for i in range (0,UPDATE_ITERATIONS):
-        for vertex in Vf:
+        for vertex in vf:
             gamma = calculateGamma(vertex)
             kappa = calculateKappa(vertex)
             vertex.distribution = gamma / kappa
@@ -87,20 +116,28 @@ def calculateKappa(vertex):
 
 
 # Returns the peripheral vertices of the target language graph
-def collectPeripheralVertices():
-    return None
+def collectPeripheralVertices(graph):
+    periheralVertices = []
+    for vertex in graph:
+        if vertex.__class__.__name__ == PeripheralTargetVertex: #TODO: Check if this actually works!
+            periheralVertices.append(vertex)
+    return periheralVertices
 
 
 # Returns the internal vertices of the target language graph
-def collectInternalVertices():
-    return None
+def collectInternalVertices(graph):
+    internalVertices = []
+    for vertex in graph:
+        if vertex.__class__.__name__ != PeripheralTargetVertex: #TODO: Check if this actually works!
+            internalVertices.append(vertex)
+    return internalVertices
 
 
 def calculateLabelDistribution(vfl):
     # generate distribution statistics
     labelAlignments = {}
     for vertex in vfl:
-        token = vfl.middleWord
+        token = vfl.token
         alignedWord = vertex.alignedWord
         sourceTag = alignedWord.tag
         if token in labelAlignments:
@@ -130,8 +167,9 @@ def calculateLabelDistribution(vfl):
 
     # assign label distributions to peripheral vertices
     for vertex in vfl:
-        distribution = labelDistribution[vertex.middleWord]
+        distribution = labelDistribution[vertex.token]
         vertex.distribution = distribution
+
         # TODO Test: Sum of distribution equals 1?
         probSum = 0
         for entry in distribution:
@@ -139,7 +177,43 @@ def calculateLabelDistribution(vfl):
         if (probSum != 1): print "Distribution of probabilities does not sum to 1!"
 
 
+# Calculates the distribution of tags for all word types encountered in the target language
+def calcTagProbs(vf):
+    dictionary = {}
+    for vertex in vf:
+        wordType = vertex.token
+        distribution = vertex.distribution
+        if wordType in dictionary:
+            tokenDistribution = dictionary[wordType]
+            dictionary[wordType] = {k: tokenDistribution.get(k, 0) + distribution.get(k, 0) \
+                                    for k in set(tokenDistribution) & set(distribution)}
+        else:
+            dictionary[wordType] = distribution
 
-if __name__ == "__main__":
+    wordTypeTagProbs = {}
+    for wordType in dictionary:
+        wordTypeTagProbs[wordType] = {}
+        for tag in dictionary[wordType]:
+            tagProb = dictionary[wordType][tag]
+            distSum = sum(dictionary[wordType]) - tagProb
+            wordTypeTagProbs[wordType][tag] = tagProb / distSum
+
+    return wordTypeTagProbs
 
 
+# Determines possible tags for all word types by thresholding the tag distributions
+def threshold(wordTypeTagProbs):
+    possibleTags = {}
+    for wordType in wordTypeTagProbs:
+        possibleTags[wordType] = {}
+        for tag in wordTypeTagProbs[wordType]:
+            if wordTypeTagProbs[wordType][tag] > TAU:
+                possibleTags[wordType][tag] = 1
+            else:
+                possibleTags[wordType][tag] = 0
+
+
+# Runs the POS induction model
+def runInductionModel():
+    # TODO: Implement induction model
+    return None
