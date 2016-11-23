@@ -6,16 +6,22 @@
 
 # TODO: Complete with coarse universal tag set
 POS_TAGS = ['N', 'V', 'ADJ']
+NUMBER_TAGS = 3
+
 UPDATE_ITERATIONS = 10
 NU = 0,000002
 
+UNIFORM_PROB = 1/NUMBER_TAGS
+UNIFORM = {'N' : UNIFORM_PROB, 'V' : UNIFORM_PROB, 'ADJ' : UNIFORM_PROB}
 
 class Vertex(object):
     """Vertex of the bilingual graph"""
 
-    def __init__(self, arg):
+    def __init__(self, neighbors, weights):
         super(Vertex, self).__init__()
-        self.arg = arg
+        self.neighbors = neighbors
+        # weights[neigbhor] = w_i_j
+        self.weights = weights
 
 
 class PeripheralVertex(Vertex):
@@ -67,7 +73,7 @@ def calculateGamma(vertex):
     for possibleLabel in POS_TAGS:
         count = 0
         for neighbor in vertex.neighbors:
-            count = count + w_i_j * q_m_1[possibleLabel] + NU * U_y #TODO: What are w_i_j and U_y
+            count = count + vertex.weight[neighbor] * q_m_1[possibleLabel] + NU * UNIFORM_PROB
         gamma[possibleLabel] = count
     return gamma
 
@@ -76,7 +82,7 @@ def calculateGamma(vertex):
 def calculateKappa(vertex):
     kappa = NU
     for neighbor in vertex.neighbors:
-        kappa = kappa + w_i_j #TODO: What is w_i_j
+        kappa = kappa + vertex.weights[neighbor]
     return kappa
 
 
