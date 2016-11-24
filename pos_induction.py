@@ -2,7 +2,7 @@
 # Part 4+5: POS projection & POS induction
 
 # Alexandra Arkut, Janosch Haber, Muriel Hol, Victor Milewski
-# v.0.3 - 2016-11-22
+# v.0.4 - 2016-11-22
 
 POS_TAGS = ['NOUN', 'VERB', 'ADJ', 'ADV', 'PRON', 'DET', 'ADP', 'NUM', 'CONJ', 'PRT', 'PUNC', 'X']
 NUMBER_TAGS = len(POS_TAGS)
@@ -74,7 +74,9 @@ def POS_induction():
     # Compute tag probabilities for foreign word types
     wordTypeTagProbs = calcTagProbs()
     # Remove tags with below-threshold probablities
-    wordTagProbs = threshold(wordTypeTagProbs)
+    possibleTags = threshold(wordTypeTagProbs)
+    # Determine word features
+    wordFeatures = determineFeatures(possibleTags)
     # Induce tags for target language vertices
     runInductionModel()
 
@@ -201,7 +203,7 @@ def calcTagProbs(vf):
     return wordTypeTagProbs
 
 
-# Determines possible tags for all word types by thresholding the tag distributions
+# Returns a dictionary with possible tags for all word types by thresholding the tag distributions
 def threshold(wordTypeTagProbs):
     possibleTags = {}
     for wordType in wordTypeTagProbs:
@@ -211,9 +213,81 @@ def threshold(wordTypeTagProbs):
                 possibleTags[wordType][tag] = 1
             else:
                 possibleTags[wordType][tag] = 0
+    return possibleTags
 
 
 # Runs the POS induction model
 def runInductionModel():
     # TODO: Implement induction model
     return None
+
+
+# Extends the vector of possible tags with features of the word type
+def determineFeatures(possibleTags):
+    for wordType in possibleTags:
+        features = dict2vec(possibleTags[wordType])
+        if wordIdentity(wordType):
+            features.append(1)
+        else: features.append(0)
+        if containsDigit(wordType):
+            features.append(1)
+        else: features.append(0)
+        if isCap(wordType):
+            features.append(1)
+        else: features.append(0)
+        if containsHyphen(wordType):
+            features.append(1)
+        else: features.append(0)
+        features.extend(checkSuffix(wordType))
+        possibleTags[wordType] = features
+    return possibleTags
+
+
+# Transforms a given dictionary into a vector
+def dict2vec(dictionary):
+    vector = []
+    for key in dictionary:
+        vector.append(dictionary[key])
+    return vector
+
+
+# Transforms a given vector into a dictionary with the keys specified
+def vec2dic(vector, keys):
+    if (len(vector) == len(keys)):
+        dictionary = {}
+        for i in range(len(keys)):
+            dictionary[keys[i]] = vector[i]
+        return dictionary
+    else:
+        print "ERROR: Vector size does not match number of keys"
+        return None
+
+
+# Returns True in case of word identity, False otherwise
+def wordIdentity(word):
+    # TODO! Check word identity?!
+    return False
+
+
+# Returns True if word contains a digit, False otherwise
+def containsDigit(word):
+    if '.' in word: return True
+    else: return False
+
+
+# Returns True if word starts with an uppercase letter, False otherwise
+def isCap(word):
+    if word[0].isupper(): return True
+    else: return False
+
+
+# Returns True if word contains a hyphen, False otherwise
+def containsHyphen(word):
+    if '-' in word: return True
+    else: return False
+
+
+# Returns a 3x1 vector that has ones for either suffix-1, suffix-2 or suffix-3
+def checkSuffix(word):
+    #TODO! Check suffix features up to length 3
+    return [1, 1, 1]
