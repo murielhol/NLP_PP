@@ -1,6 +1,4 @@
-from graph_construction import *
+from graph_construction import Graphs
 import numpy as np 
 
-w = get_weight_matrix('europarl-v7.pt-en.en')
-print "first row:"+str(w[0])
-print "dimensions: "+str(np.shape(w))
+graph = Graphs(64,'europarl-v7.pt-en.pt','europarl-v7.pt-en.en')
