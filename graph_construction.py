@@ -8,14 +8,17 @@ from itertools import chain
 import numpy as np
 import sys
 import time
+import pygtrie as trie
 
 class Graphs:
+    max_lines = 200000
     english_wordlist = []
     foreign_wordlist = []
-    english_embeddings = None
-    foreign_embeddings = None
-    pentagrams = []
-    vectors = None
+    foreign_penta_trie = None
+    # english_embeddings = None
+    # foreign_embeddings = None
+    # pentagrams = []
+    # vectors = None
     w = None
     a = None
     r = None
@@ -31,20 +34,25 @@ class Graphs:
         self.foreign_wordlist = self.create_wordlist(for_filename)
         print "finsished in "+str(time.clock()-start)+"s"
         print "length foreing dict: "+ str(len(self.foreign_wordlist))
-        print "create english embeddings..."
+        print "create trie for foreign pentagrams..."
         start = time.clock()
-        self.english_embeddings = self.create_embeddings(embedding_dims,self.english_wordlist)
-        print "finsished in "+str(time.clock()-start)+"s"
-        print "create foreign embeddings..."
-        start = time.clock()
-        self.foreign_embeddings = self.create_embeddings(embedding_dims,self.foreign_wordlist)
+        self.foreign_penta_trie = self.create_penta_tries(for_filename)
         print "finsished in "+str(time.clock()-start)+"s"
 
+        # print "create english embeddings..."
+        # start = time.clock()
+        # self.english_embeddings = self.create_embeddings(embedding_dims,self.english_wordlist)
+        # print "finsished in "+str(time.clock()-start)+"s"
+        # print "create foreign embeddings..."
+        # start = time.clock()
+        # self.foreign_embeddings = self.create_embeddings(embedding_dims,self.foreign_wordlist)
+        # print "finsished in "+str(time.clock()-start)+"s"
+
         # #nog niet getest vanaf hier
-        print "create pentagrams..."
-        start = time.clock()
-        pentagrams = self.create_pentagrams(for_filename)
-        print "finsished in "+str(time.clock()-start)+"s"
+        # print "create pentagrams..."
+        # start = time.clock()
+        # pentagrams = self.create_pentagrams(for_filename)
+        # print "finsished in "+str(time.clock()-start)+"s"
         # print "create feature vectors..."
         # start = time.clock()
         # vectors = create_pentagram_vectors(foreign_embeddings,foreign_wordlist,pentagrams)
@@ -71,11 +79,33 @@ class Graphs:
     #     store these again in there variables
     #     """
 
+    def create_penta_tries(self,filename):
+        tree = trie.StringTrie()
+
+        with open(filename) as f:
+            i = 0
+            for line in f:
+                if i >= self.max_lines:
+                    break
+                words = line.split()
+                grams = self.context2(2,words)
+                for gram in grams:
+                    key = ""
+                    for g in gram:
+                        key += "/"+g
+                        if tree.has_key(key):
+                            tree[key] += 1
+                        else:
+                            tree[key] = 1
+                i += 1
+        return tree
 
     def create_wordlist(self,filename):
         words = set()
         with open(filename) as f:
-            for line in f:
+            for i,line in enumerate(f):
+                if i >= self.max_lines:
+                    break
                 line = line.lower()
                 w = line.split()
                 words |= set(w)
