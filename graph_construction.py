@@ -23,7 +23,7 @@ class Graphs:
     a = None
     r = None
 
-    def __init__(self,embedding_dims,en_filename,for_filename):
+    def __init__(self,en_filename,for_filename):
         print "create english wordlist..."
         start = time.clock()
         self.english_wordlist = self.create_wordlist(en_filename)
@@ -93,10 +93,14 @@ class Graphs:
                     key = ""
                     for g in gram:
                         key += "/"+g
-                        if tree.has_key(key):
+                        try:
                             tree[key] += 1
-                        else:
+                        except KeyError:
                             tree[key] = 1
+                        # if tree.has_key(key):
+                        #     tree[key] += 1
+                        # else:
+                        #     tree[key] = 1
                 i += 1
         return tree
 
