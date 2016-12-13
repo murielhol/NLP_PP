@@ -1,4 +1,4 @@
 from graph_construction import Graphs
 import numpy as np 
 
-graph = Graphs('data/en_50000','data/pt_50000')
+graph = Graphs('data/en_50000','data/pt_50000','data/en-pt_50000.forward.align')

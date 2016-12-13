@@ -13,6 +13,10 @@
 
 from itertools import chain
 import numpy as np
+from numpy.linalg import norm as n
+from scipy.spatial.distance import cosine
+#lukt niet op windows... hahaha
+#from sklearn.metrics.pairwise import cosine_similarity
 import sys
 import time
 import pygtrie as trie
@@ -49,13 +53,13 @@ class Graphs:
     #tag distribution for foreign languish from alignment with english
     r = None
 
-    def __init__(self,en_filename,for_filename):
+    def __init__(self,en_filename,for_filename,align_filename):
         """
         calls all the methods that create the global variables
         """
         print "create english wordlist..."
         start = time.clock()
-        self.english_wordlist = self.create_wordlist(en_filename)
+        self.english_wordlist,_ = self.create_wordlist(en_filename)
         print "finsished in "+str(time.clock()-start)+"s"
         print "length english dict: "+ str(len(self.english_wordlist))
         
@@ -77,8 +81,10 @@ class Graphs:
         
         print "create trigram vectors..."
         start = time.clock()
-        self.foreign_trigram_vectors = self.create_feature_vectors(
-            self.foreign_trigrams,self.foreign_penta_trie,self.total_unigrams)
+        # self.foreign_trigram_vectors = self.create_feature_vectors(
+        #     self.foreign_trigrams,self.foreign_penta_trie,self.total_unigrams)
+        self.foreign_trigram_vectors = self.create_random_vectors(
+            self.foreign_trigrams,128)
         print "finsished in "+str(time.clock()-start)+"s"
         
         print "create weight matrix..."
@@ -86,10 +92,11 @@ class Graphs:
         self.w = self.create_weights(self.foreign_trigram_vectors)
         print "finsished in "+str(time.clock()-start)+"s"
         
-        # print "create allignment matrix..."
-        # start = time.clock()
-        # self.a = self.create_allignments(en_filename,for_filename)
-        # print "finsished in "+str(time.clock()-start)+"s"
+        print "create allignment matrix..."
+        start = time.clock()
+        self.a = self.create_alignments(en_filename,for_filename,align_filename,
+            self.english_wordlist,self.foreign_wordlist)
+        print "finsished in "+str(time.clock()-start)+"s"
 
         print "writing trie to file..."
         pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
@@ -164,7 +171,7 @@ class Graphs:
         mat = np.zeros(len(trigrams)*9).reshape(len(trigrams),9)
         for i,trigram in enumerate(trigrams):
             mat[i,0] = self.penta_pmi(trigram,tree)
-            mat[i,1] = self.tri_pmi(trigram,tree)
+            mat[i,1] = self.tri_pmi(trigram,tree,total)
             mat[i,2] = self.left_pmi(trigram,tree)
             mat[i,3] = self.right_pmi(trigram,tree)
             mat[i,4] = self.center_pmi(trigram,tree,total)
@@ -174,20 +181,25 @@ class Graphs:
             mat[i,8] = self.has_suffix(trigram)
         return mat
 
+    def create_random_vectors(self,trigram,dims):
+        return np.random.uniform(0,1,len(trigram)*dims).reshape(len(trigram),dims)
+
     def penta_pmi(self,trigram,tree):
         """
         returns the pmi for the trigram plus context words
         """
         return 1
 
-    def tri_pmi(self,trigram,tree):
+    def tri_pmi(self,trigram,tree,total):
         """
         returns the pmi for the trigram
         """
-        #figgure out a manner of calculating pmi
-        #calculate for all different pentagrams with this trigram
-        #combine the different pmi's
-        return 1
+        uni = trigram.split("/")
+        if tree.has_key(trigram) and tree.has_key(uni[0]) and tree.has_key(uni[1]) and tree.has_key(uni[2]):
+            p_tri = tree[trigram]/total
+            p_denom = (tree[uni[0]]/total)*(tree[uni[1]]/total)*(tree[uni[2]]/total)
+            return np.log(p_tri/p_denom)
+        return 0
 
     def left_pmi(self,trigram,tree):
         """
@@ -214,7 +226,7 @@ class Graphs:
         """
         #somehow some of the words are not in the tree..
         if tree.has_key(trigram.split("/")[1]):
-            return float(tree[trigram.split("/")[1]])/total
+            return np.log(float(tree[trigram.split("/")[1]])/total)
         print trigram.split("/")[1]
         return 0
 
@@ -258,27 +270,43 @@ class Graphs:
         calculates the weights between all the trigrams using their vectors
         these are returned in a weight matrix
         """
-        w = np.zeros(len(vectors)**2).reshape(len(vectors),len(vectors))
-        for i,vecA in enumerate(vectors):
-            for j,vecB in enumerate(vectors[i:]):
-                w[i,j+i] = self.cosine_similarity(vecA,vecB)
-                w[j+i,i] = w[i,j+i]
-        return w
+        vecs = np.array(vectors)
+        w2 = 1.0 - np.dot(vecs/n(vecs,axis=1)[:,None],(vecs/n(vecs,axis=1)[:,None]).T)
+        # w = np.zeros(len(vectors)*len(vectors)).reshape(len(vectors),len(vectors))
+        # for i,vecA in enumerate(vectors):
+        #     for j,vecB in enumerate(vectors[i:]):
+        #         w[i,j+i] = cosine(vecA,vecB)
+        #         w[j+i,i] = w[i,j+i]
+        # print np.shape(w)
+        # print np.shape(w2)
+        # print np.max(w2-w)
+        # print np.max(w-w2)
+        # print np.min(w2-w)
+        # print np.min(w-w2)
+        return w2
 
-    def create_allignments(self,en_filename,for_filename):
+    def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
         """
         i am not sure what i did here, weird piece of code, needs changing
         """
-        a = np.zeros(len(en_filename)*len(for_filename)).reshape(len(for_filename),len(en_filename))
+        a = np.zeros(len(en_wordlist)*len(for_wordlist)).reshape(len(en_wordlist),len(for_wordlist))
         with open(en_filename,'r') as fen:
             with open(for_filename,'r') as ffor:
-                for en_line,for_line in zip(fen,ffor):
-                    ####
-                    #align = run_allignment_tool(en_line,for_line)
-                    ####
-                    align = np.zeros(len(en_line.split()))
-                    for i,j in enumerate(align):
-                        a[i,j] = a[i,j]+1
+                with open(align_filename,'r') as fal:
+                    for k,(en_line,for_line,al_line) in enumerate(zip(fen,ffor,fal)):
+                        if k >= self.max_lines:
+                            break
+                        en_words = en_line.split()
+                        for_words = for_line.split()
+                        #for_grams = self.context3(1,for_line.split())
+                        al_words = al_line.split()
+                        for align in al_words:
+                            al = align.split('-')
+                            i = en_wordlist.index(en_words[int(al[0])])
+                            j = for_wordlist.index(for_words[int(al[1])])
+                            a[i,j] += 1
+        a = a/a.sum(axis=1)[:,None]
+        a[a<0.9] = 0
         return a
 
     def cosine_similarity(self,vecA,vecB):
