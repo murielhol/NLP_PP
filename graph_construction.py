@@ -349,6 +349,13 @@ class Graphs:
             grams.append(key)
         return grams
 
+
+
+#  FEATURE LISTINGS
+
+    
+    # left word, right context
+    # returns list of pentagrams for which trigram is lwrc
     def lwrc(self,tri,keys):
         t = tri.split('/')
         r = r'.*?/'+t[0] + r'/.*?/'+ t[1]+ '/' + t[2]
@@ -359,6 +366,8 @@ class Graphs:
                     lwrc += [k]
         return lwrc
     
+    # left context, right word
+    # returns list of pentagrams for which trigram is lcrw
     def lcrw(self,tri,keys):
         t = tri.split('/')
         r = t[0] + '/' + t[1]+ r'/.*?/'+ t[2] + '/.*?'
@@ -369,9 +378,65 @@ class Graphs:
                 if re.match(r,k):
                     lcrw += [k]
         return lcrw
+
+    # returns list of bigrams for which second word is first word of trigram
+    def lc(self,tri,keys):
+        t = tri.split('/')
+        r = r'.*?/' + t[0]
+        print r
+        lc = []
+        for k in keys:
+            if len(k.split('/')) == 2:
+                if re.match(r,k):
+                    lc += [k]
+        return lc
     
+    # returns list of bigrams for which first word is last word of trigram
+    def rc(self,tri,keys):
+        t = tri.split('/')
+        r = t[2] + r'/.*?'
+        print r
+        rc = []
+        for k in keys:
+            if len(k.split('/')) == 2:
+                if re.match(r,k):
+                    rc += [k]
+        return rc
 
+    # returns list of trigrams for which center word is same as trigram
+    def tri_c(self,tri,keys):
+        t = tri.split('/')
+        r = t[0] + r'/' + t[2]
+        print r
+        tri_c = []
+        for k in keys:
+            if len(k.split('/')) == 2:
+                if re.match(r,k):
+                    tri_c += [k]
+        return tri_c
 
+    #?
+    def c(self,tri,keys):
+        t = tri.split('/')
+        r = r'.*?/' + t[1] + r'/.*?'
+        print r
+        c = []
+        for k in keys:
+            if len(k.split('/')) == 3:
+                if re.match(r,k):
+                    c += [k]
+        return c
+
+    #?
+    def penta(self,tri,keys):
+        r = r'.*?/' + tri + r'/.*?'
+        print r
+        penta = []
+        for k in keys:
+            if len(k.split('/')) == 5:
+                if re.match(r,k):
+                    penta += [k]
+        return penta
 
 
 
