@@ -73,6 +73,7 @@ class Graphs:
         start = time.clock()
         self.foreign_trigrams = self.create_contextlist(1,for_filename)
         print "finsished in "+str(time.clock()-start)+"s"
+        print "length foreing trigrams: "+ str(len(self.foreign_trigrams))
         
         print "create trie for foreign pentagrams..."
         start = time.clock()
@@ -102,10 +103,10 @@ class Graphs:
         pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
         
         #test if left context right word works
-        keys = self.foreign_penta_trie.keys()
-        print self.foreign_trigrams[0]
-        lcrw = self.lcrw(self.foreign_trigrams[0],keys)
-        print lcrw[0:10]
+        # keys = self.foreign_penta_trie.keys()
+        # print self.foreign_trigrams[0]
+        # lcrw = self.lcrw(self.foreign_trigrams[0],keys)
+        # print lcrw[0:10]
         print "DONE!"
 
     def create_wordlist(self,filename):
@@ -480,6 +481,28 @@ class Graphs:
 
     def get_english_wordlist(self):
         return self.english_wordlist
+
+    def export_to_dot_file(self):
+        ind = np.sort(np.argpartition(self.w,-5,axis=1)[:,-5:],axis=1)
+        count = 0
+        count2 = 0
+        fout = open('graph2.dot','w')
+        fout.write("Vertice_Graph {\n")
+        for i,row in enumerate(ind):
+            x = self.foreign_trigrams[i]
+            x = x.replace("\'\'", "*")
+            x = x.replace("\"", "*")
+            for j in row:
+                count2 += 1
+                if self.w[i,j] != 0:
+                    count += 1
+                    y = self.foreign_trigrams[j]
+                    y = y.replace("\'\'", "*")
+                    y = y.replace("\"", "*")
+                    fout.write("\""+y+"\"->\""+x+"\";\n")
+        fout.write("}")
+        fout.close()
+        print "number of edges: "+str(count)+"   instead of "+str(count2)
 
     # def create_embeddings(self,embedding_dims,wordlist):
     #     emb = np.random.normal(0., 0.01, embedding_dims*len(wordlist))
