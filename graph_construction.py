@@ -21,6 +21,7 @@ import sys
 import time
 import pygtrie as trie
 import pickle
+import re
 
 class Graphs:
     #limit data size (remove after development)
@@ -89,9 +90,9 @@ class Graphs:
         print "finsished in "+str(time.clock()-start)+"s"
         
         print "create weight matrix..."
-        start = time.clock()
-        self.w = self.create_weights(self.foreign_trigram_vectors)
-        print "finsished in "+str(time.clock()-start)+"s"
+        #start = time.clock()
+        #self.w = self.create_weights(self.foreign_trigram_vectors)
+        #print "finsished in "+str(time.clock()-start)+"s"
         
         print "create allignment matrix..."
         start = time.clock()
@@ -103,10 +104,9 @@ class Graphs:
         pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
         
         #test if left context right word works
-        # keys = self.foreign_penta_trie.keys()
-        # print self.foreign_trigrams[0]
-        # lcrw = self.lcrw(self.foreign_trigrams[0],keys)
-        # print lcrw[0:10]
+        keys = self.foreign_penta_trie.keys()
+        print self.foreign_trigrams[0]
+        feature = self.create_dict_for_vertex(self.foreign_trigrams[0],keys)
         print "DONE!"
 
     def create_wordlist(self,filename):
@@ -277,20 +277,15 @@ class Graphs:
         calculates the weights between all the trigrams using their vectors
         these are returned in a weight matrix
         """
-        vecs = np.array(vectors)
-        w2 = 1.0 - np.dot(vecs/n(vecs,axis=1)[:,None],(vecs/n(vecs,axis=1)[:,None]).T)
-        # w = np.zeros(len(vectors)*len(vectors)).reshape(len(vectors),len(vectors))
-        # for i,vecA in enumerate(vectors):
-        #     for j,vecB in enumerate(vectors[i:]):
-        #         w[i,j+i] = cosine(vecA,vecB)
-        #         w[j+i,i] = w[i,j+i]
-        # print np.shape(w)
-        # print np.shape(w2)
-        # print np.max(w2-w)
-        # print np.max(w-w2)
-        # print np.min(w2-w)
-        # print np.min(w-w2)
-        return w2
+        # vecs = np.array(vectors)
+        # w2 = 1.0 - np.dot(vecs/n(vecs,axis=1)[:,None],(vecs/n(vecs,axis=1)[:,None]).T)
+        w = np.zeros(len(vectors)*len(vectors)).reshape(len(vectors),len(vectors))
+        for i,vec_a in enumerate(vectors):
+            for j,vec_b in enumerate(vectors[i:]):
+                for key in set(vec_a).intersection(set(vec_b)):
+                    w[i,j+i] += vec_a[key] + vec_b[key]
+                w[j+i,i] = w[i,j+i]
+        return w
 
     def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
         a = np.zeros(len(en_wordlist)*len(for_wordlist)).reshape(len(en_wordlist),len(for_wordlist))
@@ -374,18 +369,37 @@ class Graphs:
         return grams
 
 #  FEATURE LISTINGS
-
+    def create_dict_for_vertex(self,vertex,keys):
+        features = {}
+        lwrc = self.lwrc(vertex,keys)
+        lcrw = self.lcrw(vertex,keys)
+        lc = self.lc(vertex,keys)
+        rc = self.rc(vertex,keys)
+        tri_c = self.tri_c(vertex,keys)
+        c = self.c(vertex,keys)
+        penta = self.penta(vertex,keys)
+        tri = self.tri(vertex,keys)
+        features.update(lwrc)
+        features.update(lcrw)
+        features.update(lc)
+        features.update(rc)
+        features.update(tri_c)
+        features.update(c)
+        features.update(penta)
+        features.update(tri)
+        return features
     
     # left word, right context
     # returns list of pentagrams for which trigram is lwrc
     def lwrc(self,tri,keys):
         t = tri.split('/')
         r = r'.*?/'+t[0] + r'/.*?/'+ t[1]+ '/' + t[2]
-        lwrc = []
+        lwrc = {}
         for k in keys:
             if len(k.split('/')) == 5:
                 if re.match(r,k):
-                    lwrc += [k]
+                    #pmi = numpy.log(
+                    lwrc[k] = self.foreign_penta_trie[k]
         return lwrc
     
     # left context, right word
@@ -394,11 +408,11 @@ class Graphs:
         t = tri.split('/')
         r = t[0] + '/' + t[1]+ r'/.*?/'+ t[2] + '/.*?'
         print r
-        lcrw = []
+        lcrw = {}
         for k in keys:
             if len(k.split('/')) == 5:
                 if re.match(r,k):
-                    lcrw += [k]
+                    lcrw[k] = self.foreign_penta_trie[k]
         return lcrw
 
     # returns list of bigrams for which second word is first word of trigram
@@ -406,11 +420,11 @@ class Graphs:
         t = tri.split('/')
         r = r'.*?/' + t[0]
         print r
-        lc = []
+        lc = {}
         for k in keys:
             if len(k.split('/')) == 2:
                 if re.match(r,k):
-                    lc += [k]
+                    lc[k] = self.foreign_penta_trie[k]
         return lc
     
     # returns list of bigrams for which first word is last word of trigram
@@ -418,11 +432,11 @@ class Graphs:
         t = tri.split('/')
         r = t[2] + r'/.*?'
         print r
-        rc = []
+        rc = {}
         for k in keys:
             if len(k.split('/')) == 2:
                 if re.match(r,k):
-                    rc += [k]
+                    rc[k] = self.foreign_penta_trie[k]
         return rc
 
     # returns list of trigrams for which center word is same as trigram
@@ -430,11 +444,11 @@ class Graphs:
         t = tri.split('/')
         r = t[0] + r'/' + t[2]
         print r
-        tri_c = []
+        tri_c = {}
         for k in keys:
             if len(k.split('/')) == 2:
                 if re.match(r,k):
-                    tri_c += [k]
+                    tri_c[k] = self.foreign_penta_trie[k]
         return tri_c
 
     #?
@@ -442,24 +456,36 @@ class Graphs:
         t = tri.split('/')
         r = r'.*?/' + t[1] + r'/.*?'
         print r
-        c = []
+        c = {}
         for k in keys:
             if len(k.split('/')) == 3:
                 if re.match(r,k):
-                    c += [k]
+                    c[k] = self.foreign_penta_trie[k]
         return c
 
     #?
     def penta(self,tri,keys):
         r = r'.*?/' + tri + r'/.*?'
         print r
-        penta = []
+        penta = {}
         for k in keys:
             if len(k.split('/')) == 5:
                 if re.match(r,k):
-                    penta += [k]
+                    penta[k] = self.foreign_penta_trie[k]
         return penta
+    
+    def tri(self, tri, keys):
+        trigram = {}
+        trigram[tri] = self.foreign_penta_trie[tri]
+        return trigram
+
 #end FEATURE LISTING
+
+# PMI
+#    def compute_PMI(self,vertex,features):
+#        PMIs = {}
+#        for f in features.keys():
+#            PMIs[f] = numpy.log(
 
     def get_weight_matrix(self):
         return self.w
@@ -607,4 +633,3 @@ class Graphs:
     #     gram_features = create_gram_features()
     #     print len(gram_features)
     #     return create_weight_matrix(gram_features)
-
