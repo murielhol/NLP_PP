@@ -46,6 +46,7 @@ We labeled the English side of the corpus with the twelve universal POS tags fro
 #### Vertice Representation
 
 To create a graph, we first need to represent each foreign Vertice as a vector, so we can do calculations on it. We used the features from A.Subramanya et al. (2010) as listed in the table below:
+
 | Feature                   | Description    |
 |--------------------------:|:--------------:|
 | Trigram + Context         | x1 x2 x3 x4 x5 |
