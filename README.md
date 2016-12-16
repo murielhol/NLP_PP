@@ -38,7 +38,7 @@ In our experiments we use the English-Portugese Europarl corpus P. Koehn (2005, 
 
 We are only using the first 50000 lines from the corpus, to keep the implementation simple and to obtain a representation of low resource language. 
 
-For the foreign language (in this case Portugese) is the text separated into trigrams. We did this by taking for every word one word before and one word after it, this are our Vertices. If it was the first or the last word in the sentence a start token (<s>) or an end token (</s>) was added. 
+For the foreign language (in this case Portugese) is the text separated into trigrams. We did this by taking for every word one word before and one word after it, this are our Vertices. If it was the first or the last word in the sentence a start token (\<s>) or an end token (\</s>) was added. 
 
 We labeled the English side of the corpus with the twelve universal POS tags from S. Petrov et al. (2011).
 
