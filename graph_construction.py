@@ -80,14 +80,13 @@ class Graphs:
         start = time.clock()
         # self.foreign_trigram_vectors = self.create_feature_vectors(
         #     self.foreign_trigrams,self.foreign_penta_trie,self.total_unigrams)
-        self.foreign_trigram_vectors = self.create_random_vectors(
-            self.foreign_trigrams,128)
+        self.foreign_trigram_vectors = self.create_trigram_vectors()
         print "finsished in "+str(time.clock()-start)+"s"
         
         print "create weight matrix..."
-        #start = time.clock()
-        #self.w = self.create_weights(self.foreign_trigram_vectors)
-        #print "finsished in "+str(time.clock()-start)+"s"
+        start = time.clock()
+        self.w = self.create_weights(self.foreign_trigram_vectors)
+        print "finsished in "+str(time.clock()-start)+"s"
         
         print "create allignment matrix..."
         start = time.clock()
@@ -97,12 +96,13 @@ class Graphs:
 
         print "writing trie to file..."
         pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
-        
+        print
         #test if left context right word works
-        keys = self.foreign_penta_trie.keys()
-        print self.foreign_trigrams[0]
-        feature = self.bi_features(self.foreign_trigrams[0],keys)
-        print feature
+#        keys = self.foreign_penta_trie.keys()
+#        print self.foreign_trigrams[0]
+#        feature = self.tri_features(self.foreign_trigrams[0],keys)
+#        print feature
+
         print "DONE!"
 
     def create_wordlist(self,filename):
@@ -151,6 +151,7 @@ class Graphs:
                     break
                 words = line.split()
                 grams = self.context2(2,words)
+                print grams
                 for gram in grams:
                     key = ""
                     for g in gram:
@@ -162,6 +163,7 @@ class Graphs:
                             tree[key] += 1
                         except KeyError:
                             tree[key] = 1
+#                        print key
                 i += 1
         return tree
 
@@ -276,11 +278,14 @@ class Graphs:
         # vecs = np.array(vectors)
         # w2 = 1.0 - np.dot(vecs/n(vecs,axis=1)[:,None],(vecs/n(vecs,axis=1)[:,None]).T)
         w = np.zeros(len(vectors)*len(vectors)).reshape(len(vectors),len(vectors))
-        for i,vec_a in enumerate(vectors):
-            for j,vec_b in enumerate(vectors[i:]):
-                for key in set(vec_a).intersection(set(vec_b)):
-                    w[i,j+i] += vec_a[key] + vec_b[key]
-                w[j+i,i] = w[i,j+i]
+        for key_a in vectors.keys():
+            i = self.foreign_trigrams.index(key_a)
+            for key_b in vectors.keys():
+                j = self.foreign_trigrams.index(key_b)
+                if w[i,j] == 0:
+                    for key in set(vectors[key_a].keys()).intersection(set(vectors[key_b].keys())):
+                        w[i,j] += vectors[key_a][key] + vectors[key_b][key]
+                    w[j,i] = w[i,j]
         return w
 
     def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
@@ -323,14 +328,23 @@ class Graphs:
             gram = []
             if i-n < 0:
                 for _ in range(0-(i-n)):
-                    gram += ['<S>']
+                    gram += ['<s>']
             gram += words[i-n+len(gram):i]
             if i+n > len(words)-1:
                 gram += words[i:len(words)]
                 for _ in range(2*n+1-len(gram)):
-                    gram += ['</s>']
+                    gram += ['<|s>']
             else:
                 gram += words[i:i+n+1]
+            
+        #make additional shorter ngrams if last word
+            if i == len(words)-1:
+                for j in np.arange(n):
+                    gram2 = []
+                    gram2 += words[i-j+len(gram2):i+1]
+                    for _ in range(n):
+                        gram2 += ['<|s>']
+                    narray.append(gram2)
             narray[i] = gram
         return(narray)
 
@@ -346,14 +360,22 @@ class Graphs:
             gram = []
             if i-n < 0:
                 for _ in range(0-(i-n)):
-                    gram += ['<S>']
+                    gram += ['<s>']
             gram += words[i-n+len(gram):i]
             if i+n > len(words)-1:
                 gram += words[i:len(words)]
                 for _ in range(2*n+1-len(gram)):
-                    gram += ['</s>']
+                    gram += ['<|s>']
             else:
                 gram += words[i:i+n+1]
+            #make shorter ngrams if last word
+#            if i == len(words)-1:
+#                for j in range(n):
+#                    gram2 = []
+#                    gram2 += words[i-j+len(gram):i]
+#                    for _ in range(2*n+1-len(gram)):
+#                        gram2 += ['<|s>']
+#                    narray.append(gram2)
             narray[i] = gram
         grams = []
         for lst in narray:
@@ -367,25 +389,39 @@ class Graphs:
         return grams
 
 #  FEATURE LISTINGS
+    def create_trigram_vectors(self):
+        vectors = {}
+        keys = self.foreign_penta_trie.keys()
+        for gram in self.foreign_trigrams:
+            vector = {}
+            features,cooccur = self.create_dict_for_vertex(gram,keys)
+            for feature in features.keys():
+                try:
+                    a = (cooccur[feature]*1.0/7*self.total_unigrams)
+                    b = (features[feature]*1.0/7*self.total_unigrams)
+                    c = (self.foreign_penta_trie[gram]*1.0/self.total_unigrams)
+                    vector[feature] = np.log(a/(b*c))
+                except KeyError:
+                    vector[feature] = 0
+            vectors[gram] = vector
+        return vectors
+    
     def create_dict_for_vertex(self,vertex,keys):
         features = {}
-        lwrc = self.lwrc(vertex,keys)
-        lcrw = self.lcrw(vertex,keys)
-        lc = self.lc(vertex,keys)
-        rc = self.rc(vertex,keys)
-        tri_c = self.tri_c(vertex,keys)
-        c = self.c(vertex,keys)
-        penta = self.penta(vertex,keys)
-        tri = self.tri(vertex,keys)
-        features.update(lwrc)
-        features.update(lcrw)
-        features.update(lc)
-        features.update(rc)
-        features.update(tri_c)
-        features.update(c)
-        features.update(penta)
+        cooccur = {}
+        uni = self.uni_features(vertex)
+        bi = self.bi_features(vertex,keys)
+        tri = self.tri_features(vertex,keys)
+        uni_co = self.uni_cooccur(vertex)
+        bi_co = self.bi_cooccur(vertex,keys)
+        tri_co = self.tri_cooccur(vertex,keys)
+        features.update(uni)
+        features.update(bi)
         features.update(tri)
-        return features
+        cooccur.update(uni_co)
+        cooccur.update(bi_co)
+        cooccur.update(tri_co)
+        return features, cooccur
     
     # left word, right context
     # returns list of pentagrams for which trigram is lwrc
@@ -494,6 +530,12 @@ class Graphs:
         dict[t[1]] = self.foreign_penta_trie[t[1]]
         return dict
     
+    def uni_cooccur(self,tri):
+        t = tri.split('/')
+        dict = {}
+        dict[t[1]] = self.foreign_penta_trie[tri]
+        return dict
+    
     def bi_features(self,tri,keys):
         t = tri.split('/')
         dict = {}
@@ -515,10 +557,31 @@ class Graphs:
                         dict[k3] = self.foreign_penta_trie[k]
         return dict
     
+    def bi_cooccur(self,tri,keys):
+        t = tri.split('/')
+        dict = {}
+        r1 = r'^([^/]*?' + '/' + tri+r')$' # left context
+        r2 = r'^('+ tri + '/' + r'[^/]*?)$' # right context
+        r3 = r'^(' + t[0] + '/' + t[1] + '/' + t[2] + r')$' # tri - center
+        for k in keys:
+            if (re.match(r1,k) or re.match(r2,k)):# and len(k.split('/')) == 2 :
+                try:
+                    dict[k] += self.foreign_penta_trie[k]
+                except KeyError:
+                    dict[k] = self.foreign_penta_trie[k]
+            if re.match(r3,k): #and len(k.split('/')) == 3:
+                k2 = k.split('/')
+                k3 = str(k2[0])+'/'+str(k2[2])
+                try:
+                    dict[k3] += self.foreign_penta_trie[k]
+                except KeyError:
+                    dict[k3] = self.foreign_penta_trie[k]
+        return dict
+
     def tri_features(self,tri,keys):
         t = tri.split('/')
         dict = {}
-        r1 = r''+ tri # trigram
+        r1 = r'^'+ tri + r'$'# trigram
         r2 = r'^([^/]*?/'+ t[0] + r'/[^/]*?/[^/]*?)$' # left context, right word
         r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r'/[^/]*?)$' # left word, right context
         for k in keys:
@@ -527,7 +590,14 @@ class Graphs:
                         dict[k] += self.foreign_penta_trie[k]
                     except KeyError:
                         dict[k] = self.foreign_penta_trie[k]
-            if (re.match(r2,k) or re.match(r3,k)):
+            if (re.match(r2,k)):
+                    k2 = k.split('/')
+                    k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
+                    try:
+                        dict[k3] += self.foreign_penta_trie[k]
+                    except KeyError:
+                        dict[k3] = self.foreign_penta_trie[k]
+            if (re.match(r3,k)):
                     k2 = k.split('/')
                     k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
                     try:
@@ -536,8 +606,34 @@ class Graphs:
                         dict[k3] = self.foreign_penta_trie[k]
         return dict
     
-    def pena_features(self,tri,keys):
-        return None
+    def tri_cooccur(self,tri,keys):
+        t = tri.split('/')
+        dict = {}
+        r1 = r'^'+ tri + r'$'# trigram
+        r2 = r'^([^/]*?/'+ tri +')$' # left context, right word
+        r3 = r'^(' + tri + r'/[^/]*?)$' # left word, right context
+        for k in keys:
+            if (re.match(r1,k)):
+                try:
+                    dict[k] += self.foreign_penta_trie[k]
+                except KeyError:
+                    dict[k] = self.foreign_penta_trie[k]
+            if (re.match(r2,k)):
+                k2 = k.split('/')
+                k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
+                try:
+                    dict[k3] += self.foreign_penta_trie[k]
+                except KeyError:
+                    dict[k3] = self.foreign_penta_trie[k]
+            if (re.match(r3,k)):
+                k2 = k.split('/')
+                k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
+                try:
+                    dict[k3] += self.foreign_penta_trie[k]
+                except KeyError:
+                    dict[k3] = self.foreign_penta_trie[k]
+        return dict
+    
     
 # END NEW FEATURE LISTING
 
