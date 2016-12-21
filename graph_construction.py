@@ -4,11 +4,6 @@
 # Alexandra Arkut, Janosch Haber, Muriel Hol, Victor Milewski
 # v.0.01 - 2016-11-23
 
-###TODO###
-#formulas for calculating different PMIs
-#Method for calculating allignment matrix
-#method for calculating r matrix
-
 #pmi methods are created, some are solved, some have a proposed solution
 
 from itertools import chain
@@ -106,7 +101,8 @@ class Graphs:
         #test if left context right word works
         keys = self.foreign_penta_trie.keys()
         print self.foreign_trigrams[0]
-        feature = self.create_dict_for_vertex(self.foreign_trigrams[0],keys)
+        feature = self.bi_features(self.foreign_trigrams[0],keys)
+        print feature
         print "DONE!"
 
     def create_wordlist(self,filename):
@@ -288,7 +284,8 @@ class Graphs:
         return w
 
     def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
-        a = np.zeros(len(en_wordlist)*len(for_wordlist)).reshape(len(en_wordlist),len(for_wordlist))
+#        a = np.zeros(len(en_wordlist)*len(for_wordlist)).reshape(len(en_wordlist),len(for_wordlist))
+        a = np.zeros(len(en_wordlist)*len(self.foreign_trigrams)).reshape(len(self.foreign_trigrams),len(en_wordlist))
         with open(en_filename,'r') as fen:
             with open(for_filename,'r') as ffor:
                 with open(align_filename,'r') as fal:
@@ -296,13 +293,14 @@ class Graphs:
                         if k >= self.max_lines:
                             break
                         en_words = en_line.split()
-                        for_words = for_line.split()
-                        #for_grams = self.context3(1,for_line.split())
+                        #for_words = for_line.split()
+                        for_grams = self.context3(1,for_line.split())
                         al_words = al_line.split()
                         for align in al_words:
                             al = align.split('-')
-                            i = en_wordlist.index(en_words[int(al[0])])
-                            j = for_wordlist.index(for_words[int(al[1])])
+                            j = en_wordlist.index(en_words[int(al[0])])
+                            i = self.foreign_trigrams.index(for_grams[int(al[1])])
+                            #j = for_wordlist.index(for_words[int(al[1])])
                             a[i,j] += 1
         a = a/a.sum(axis=1)[:,None]
         a[a<0.9] = 0
@@ -487,7 +485,71 @@ class Graphs:
 #        for f in features.keys():
 #            PMIs[f] = numpy.log(
 
-    def get_weight_matrix(self):
+
+# NEW FEATURE LISTING
+
+    def uni_features(self,tri):
+        t = tri.split('/')
+        dict = {}
+        dict[t[1]] = self.foreign_penta_trie[t[1]]
+        return dict
+    
+    def bi_features(self,tri,keys):
+        t = tri.split('/')
+        dict = {}
+        r1 = r'^([^/]*?' + '/' + t[0]+r')$' # left context
+        r2 = r'^('+ t[2] + '/' + r'[^/]*?)$' # right context
+        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r')$' # tri - center
+        for k in keys:
+            if (re.match(r1,k) or re.match(r2,k)):# and len(k.split('/')) == 2 :
+                    try:
+                        dict[k] += self.foreign_penta_trie[k]
+                    except KeyError:
+                        dict[k] = self.foreign_penta_trie[k]
+            if re.match(r3,k): #and len(k.split('/')) == 3:
+                    k2 = k.split('/')
+                    k3 = str(k2[0])+'/'+str(k2[2])
+                    try:
+                        dict[k3] += self.foreign_penta_trie[k]
+                    except KeyError:
+                        dict[k3] = self.foreign_penta_trie[k]
+        return dict
+    
+    def tri_features(self,tri,keys):
+        t = tri.split('/')
+        dict = {}
+        r1 = r''+ tri # trigram
+        r2 = r'^([^/]*?/'+ t[0] + r'/[^/]*?/[^/]*?)$' # left context, right word
+        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r'/[^/]*?)$' # left word, right context
+        for k in keys:
+            if (re.match(r1,k)):
+                    try:
+                        dict[k] += self.foreign_penta_trie[k]
+                    except KeyError:
+                        dict[k] = self.foreign_penta_trie[k]
+            if (re.match(r2,k) or re.match(r3,k)):
+                    k2 = k.split('/')
+                    k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
+                    try:
+                        dict[k3] += self.foreign_penta_trie[k]
+                    except KeyError:
+                        dict[k3] = self.foreign_penta_trie[k]
+        return dict
+    
+    def pena_features(self,tri,keys):
+        return None
+    
+# END NEW FEATURE LISTING
+
+    def get_weight_matrix_all(self):
+        return self.w
+
+    def get_weight_matrix(self,n):
+        ind = np.argpartition(self.w,-n,axis=1)[:,-n:]
+        w2 = np.zeros(np.shape(self.w))
+        for i in range(np.shape(self.w)[0]):
+            for j in ind[i]:
+                w2[i,j] = self.w[i,j]
         return self.w
 
     def get_allignment_matrix(self):
@@ -529,107 +591,3 @@ class Graphs:
         fout.write("}")
         fout.close()
         print "number of edges: "+str(count)+"   instead of "+str(count2)
-
-    # def create_embeddings(self,embedding_dims,wordlist):
-    #     emb = np.random.normal(0., 0.01, embedding_dims*len(wordlist))
-    #     print emb
-    #     return emb.reshape(len(wordlist),embedding_dims)
-
-    # def create_pentagrams(self,filename):
-    #     grams = set()
-    #     with open(filename) as f:
-    #         for line in f:
-    #             grams |= set(self.context2(2,line))
-    #     return grams
-
-    # def create_pentagram_vectors(self,embeddings,wordlist,pentagrams):
-    #     vectors = []
-    #     for gram in pentagrams:
-    #         emb = []
-    #         for word in gram:
-    #             vector.append(embeddings[wordlist.index(word)])
-    #         vector = emb
-    #         vector += get_trigram(emb)
-    #         vector += get_context(emb,'l')
-    #         vector += get_context(emb,'r')
-    #         vector += get_center_word(emb)
-    #         vector += get_context_nocenter(emb)
-    #         vector += word_context(emb,'l')
-    #         vector += word_context(emb,'r')
-    #         vector += has_suffix(emb)
-    #         vectors.append(vector)
-    #     return np.array(vectors)
-
-    # get left and right context words from pentagram
-    # def get_context(self,pentagram,lr):
-    #     if lr == 'l':
-    #         return(pentagram[0:2])
-    #     if lr == 'r':
-    #         return(pentagram[len(pentagram)-2:len(pentagram)])
-
-    # def get_trigram(self,pentagram):
-    #     return([pentagram[1],pentagram[2],pentagram[3]])
-
-    # # get token word
-    # def get_center_word(self,pentagram):
-    #     return(pentagram[2])
-
-    # # get trigram without token
-    # def get_context_nocenter(self,pentagram):
-    #     return([pentagram[1],pentagram[3]])
-
-    # # get left/right word and right/left context
-    # def word_context(self,pentagram,lr):
-    #     if lr =='l':
-    #         return([pentagram[1],pentagram[3],pentagram[4]])
-    #     if lr == 'r':
-    #         return([pentagram[0],pentagram[1],pentagram[3]])
-
-    # # something with suffix
-    # #how do we know what the suffixes are for the language
-    # #isn't the suffix count not always zero or equal to center word
-    # def has_suffix(self,pentagram):
-    #     return 0
-
-
-    # # not used
-    # def ngram(n, words):
-    #     narray = [None]*(len(words)+1-n)
-    #     for i in range(len(words)+1-n):
-    #         narray[i] = [words[i:i+n]]
-    #     return(narray)
-    
-    # # context with <s> tags added
-    # def context(n, words):
-    #     narray = [None]*(len(words))
-    #     for i in range(len(words)):
-    #         narray[i] = [words[i-n:i+n+1]]
-    #         if i-n < 0:
-    #             narray[i] = ['<S>']+words[i:i+n+1]
-    #         elif i+n > len(words)-1:
-    #             narray[i] = words[i-n:len(words)]+['</S>']
-    #             return(narray)
-    #     return(narray)
-
-    # def create_gram_features():
-    #     #create all the feature vectors from the counts
-    #     grams = []
-    #     for gram,penta_count in pentagram_count.most_common():
-    #         feature_vec = []
-    #         feature_vec.append(penta_count)
-    #         feature_vec.append(trigram_count[str(get_trigram(gram))])
-    #         feature_vec.append(left_context_count[str(get_context(gram,'l'))])
-    #         feature_vec.append(right_context_count[str(get_context(gram,'r'))])
-    #         feature_vec.append(center_count[str(get_center_word(gram))])
-    #         feature_vec.append(trigram_nocenter_count[str(get_context_nocenter(gram))])
-    #         feature_vec.append(lw_rc_count[str(word_context(gram,'l'))])
-    #         feature_vec.append(rw_lc_count[str(word_context(gram,'r'))])
-    #         feature_vec.append(has_suffix(gram))
-    #         grams.append((gram,feature_vec))
-    #     return grams
-
-
-    # def get_weight_matrix(filename):
-    #     gram_features = create_gram_features()
-    #     print len(gram_features)
-    #     return create_weight_matrix(gram_features)
