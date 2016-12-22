@@ -4,14 +4,10 @@
 # Alexandra Arkut, Janosch Haber, Muriel Hol, Victor Milewski
 # v.0.01 - 2016-11-23
 
-#pmi methods are created, some are solved, some have a proposed solution
-
 from itertools import chain
 import numpy as np
 from numpy.linalg import norm as n
 from scipy.spatial.distance import cosine
-#lukt niet op windows... hahaha
-#from sklearn.metrics.pairwise import cosine_similarity
 import sys
 import time
 import pygtrie as trie
@@ -96,7 +92,6 @@ class Graphs:
 
         print "writing trie to file..."
         pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
-        print
         #test if left context right word works
 #        keys = self.foreign_penta_trie.keys()
 #        print self.foreign_trigrams[0]
@@ -151,7 +146,6 @@ class Graphs:
                     break
                 words = line.split()
                 grams = self.context2(2,words)
-                print grams
                 for gram in grams:
                     key = ""
                     for g in gram:
@@ -163,7 +157,6 @@ class Graphs:
                             tree[key] += 1
                         except KeyError:
                             tree[key] = 1
-#                        print key
                 i += 1
         return tree
 
@@ -189,87 +182,6 @@ class Graphs:
     def create_random_vectors(self,trigram,dims):
         return np.random.uniform(0,1,len(trigram)*dims).reshape(len(trigram),dims)
 
-    def penta_pmi(self,trigram,tree):
-        """
-        returns the pmi for the trigram plus context words
-        """
-        return 1
-
-    def tri_pmi(self,trigram,tree,total):
-        """
-        returns the pmi for the trigram
-        """
-        uni = trigram.split("/")
-        if tree.has_key(trigram) and tree.has_key(uni[0]) and tree.has_key(uni[1]) and tree.has_key(uni[2]):
-            p_tri = tree[trigram]/total
-            p_denom = (tree[uni[0]]/total)*(tree[uni[1]]/total)*(tree[uni[2]]/total)
-            return np.log(p_tri/p_denom)
-        return 0
-
-    def left_pmi(self,trigram,tree):
-        """
-        returns the pmi for the two words left of the center word
-        """
-        #figgure out a manner of calculating pmi
-        #calculate for all different bigrams with this trigram
-        #combine the different pmi's
-        return 1
-
-    def right_pmi(self,trigram,tree):
-        """
-        returns the pmi for the two words right of the center word
-        """
-        #figgure out a manner of calculating pmi
-        #calculate for all different bigrams with this trigram
-        #combine the different pmi's
-        return 1
-
-    def center_pmi(self,trigram,tree,total):
-        """
-        returns the pmi for the center word
-        probability of center word p(x3)
-        """
-        #somehow some of the words are not in the tree..
-        if tree.has_key(trigram.split("/")[1]):
-            return np.log(float(tree[trigram.split("/")[1]])/total)
-        print trigram.split("/")[1]
-        return 0
-
-    def no_center_pmi(self,trigram,tree):
-        """
-        returns the pmi for the trigram without the center word
-        """
-        #figgure out a manner of calculating pmi
-        #calculate for all trigrams where X2 and X4 co-occur in X2 Xi X4
-        #combine these
-        #or
-        #threat X2 X4 as a bigram
-        return 1
-
-    def lw_rc_pmi(self,trigram,tree):
-        """
-        returns the pmi score for the left word and right context combination
-        """
-        #similar problem as no_center_pmi
-        return 1
-
-    def lc_rw_pmi(self,trigram,tree):
-        """
-        returns the pmi score for the left context and right word combination
-        """
-        #similar problem as no_center_pmi
-        return 1
-
-    def has_suffix(self,trigram):
-        """
-        returns a score for if the word has a suffix or not
-        """
-        # if word is longer then 2(or 3/4...)
-        # take last 2 (or 3/4...) letters
-        # calculate probability for this suffix
-        #      -> before hand count number of suffixes
-        return 1
-
     def create_weights(self,vectors):
         """
         calculates the weights between all the trigrams using their vectors
@@ -289,23 +201,34 @@ class Graphs:
         return w
 
     def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
-#        a = np.zeros(len(en_wordlist)*len(for_wordlist)).reshape(len(en_wordlist),len(for_wordlist))
+        """
+        Count how often each foreign vertice matches against every word english word. 
+        After the counts are complete, the probability is calculates for each vertice
+        of translating to each english word. 
+        To get a high confidence alignment, the alignments lower then 0.9 are 
+        made zero. 
+        """
         a = np.zeros(len(en_wordlist)*len(self.foreign_trigrams)).reshape(len(self.foreign_trigrams),len(en_wordlist))
         with open(en_filename,'r') as fen:
             with open(for_filename,'r') as ffor:
                 with open(align_filename,'r') as fal:
+                    #loop over the english, the foreign and the alignment file together
                     for k,(en_line,for_line,al_line) in enumerate(zip(fen,ffor,fal)):
                         if k >= self.max_lines:
                             break
                         en_words = en_line.split()
-                        #for_words = for_line.split()
+                        #make trigrams from foreign words
                         for_grams = self.context3(1,for_line.split())
                         al_words = al_line.split()
+
+                        #for each alignment, test what foreign trigram aligns to 
+                        #which english word
                         for align in al_words:
                             al = align.split('-')
+
+                            #add a count at the correct index in the matrix
                             j = en_wordlist.index(en_words[int(al[0])])
                             i = self.foreign_trigrams.index(for_grams[int(al[1])])
-                            #j = for_wordlist.index(for_words[int(al[1])])
                             a[i,j] += 1
         a = a/a.sum(axis=1)[:,None]
         a[a<0.9] = 0
@@ -368,14 +291,6 @@ class Graphs:
                     gram += ['<|s>']
             else:
                 gram += words[i:i+n+1]
-            #make shorter ngrams if last word
-#            if i == len(words)-1:
-#                for j in range(n):
-#                    gram2 = []
-#                    gram2 += words[i-j+len(gram):i]
-#                    for _ in range(2*n+1-len(gram)):
-#                        gram2 += ['<|s>']
-#                    narray.append(gram2)
             narray[i] = gram
         grams = []
         for lst in narray:
@@ -390,11 +305,21 @@ class Graphs:
 
 #  FEATURE LISTINGS
     def create_trigram_vectors(self):
+        """
+        Creates for every foreign trigram/vertex a vector of PMI values.
+        It collects all the features and calculates the PMI of the vertex 
+        against the features. 
+        """
         vectors = {}
         keys = self.foreign_penta_trie.keys()
+
+        #for every unique vertex
         for gram in self.foreign_trigrams:
             vector = {}
+            #collect the features that cooccur with the vertex
             features,cooccur = self.create_dict_for_vertex(gram,keys)
+
+            #calculate the PMI for every feature
             for feature in features.keys():
                 try:
                     a = (cooccur[feature]*1.0/7*self.total_unigrams)
@@ -407,127 +332,135 @@ class Graphs:
         return vectors
     
     def create_dict_for_vertex(self,vertex,keys):
+        """
+        For a single vertex, all the features according to the feature templates
+        are collected and added to a dict. This is also done for the 
+        cooccurance between the vertex and the features. 
+        features are:
+            center word
+            trigram
+            left context
+            right context
+            trigram - center word
+            left context + right word
+            left word + right context
+        """
         features = {}
         cooccur = {}
+
+        #get the unigram feature and cooccurance for this vertex
         uni = self.uni_features(vertex)
-        bi = self.bi_features(vertex,keys)
-        tri = self.tri_features(vertex,keys)
         uni_co = self.uni_cooccur(vertex)
-        bi_co = self.bi_cooccur(vertex,keys)
-        tri_co = self.tri_cooccur(vertex,keys)
         features.update(uni)
-        features.update(bi)
-        features.update(tri)
         cooccur.update(uni_co)
-        cooccur.update(bi_co)
-        cooccur.update(tri_co)
+
+        #for all the keys in the trie, test against all the possible features
+        for k in keys:
+            #test the key against the bi and tri features and add them to the dict
+            bi = self.bi_features(vertex,k)
+            tri = self.tri_features(vertex,k)
+            features.update(bi)
+            features.update(tri)
+
+            #test the key against the cooccurances of bi and tri and add them to the dict
+            bi_co = self.bi_cooccur(vertex,k)
+            tri_co = self.tri_cooccur(vertex,k)
+            cooccur.update(bi_co)
+            cooccur.update(tri_co)
         return features, cooccur
     
-    # left word, right context
-    # returns list of pentagrams for which trigram is lwrc
-    def lwrc(self,tri,keys):
-        t = tri.split('/')
-        r = r'.*?/'+t[0] + r'/.*?/'+ t[1]+ '/' + t[2]
-        lwrc = {}
-        for k in keys:
-            if len(k.split('/')) == 5:
-                if re.match(r,k):
-                    #pmi = numpy.log(
-                    lwrc[k] = self.foreign_penta_trie[k]
-        return lwrc
-    
-    # left context, right word
-    # returns list of pentagrams for which trigram is lcrw
-    def lcrw(self,tri,keys):
-        t = tri.split('/')
-        r = t[0] + '/' + t[1]+ r'/.*?/'+ t[2] + '/.*?'
-        print r
-        lcrw = {}
-        for k in keys:
-            if len(k.split('/')) == 5:
-                if re.match(r,k):
-                    lcrw[k] = self.foreign_penta_trie[k]
-        return lcrw
-
-    # returns list of bigrams for which second word is first word of trigram
-    def lc(self,tri,keys):
-        t = tri.split('/')
-        r = r'.*?/' + t[0]
-        print r
-        lc = {}
-        for k in keys:
-            if len(k.split('/')) == 2:
-                if re.match(r,k):
-                    lc[k] = self.foreign_penta_trie[k]
-        return lc
-    
-    # returns list of bigrams for which first word is last word of trigram
-    def rc(self,tri,keys):
-        t = tri.split('/')
-        r = t[2] + r'/.*?'
-        print r
-        rc = {}
-        for k in keys:
-            if len(k.split('/')) == 2:
-                if re.match(r,k):
-                    rc[k] = self.foreign_penta_trie[k]
-        return rc
-
-    # returns list of trigrams for which center word is same as trigram
-    def tri_c(self,tri,keys):
-        t = tri.split('/')
-        r = t[0] + r'/' + t[2]
-        print r
-        tri_c = {}
-        for k in keys:
-            if len(k.split('/')) == 2:
-                if re.match(r,k):
-                    tri_c[k] = self.foreign_penta_trie[k]
-        return tri_c
-
-    #?
-    def c(self,tri,keys):
-        t = tri.split('/')
-        r = r'.*?/' + t[1] + r'/.*?'
-        print r
-        c = {}
-        for k in keys:
-            if len(k.split('/')) == 3:
-                if re.match(r,k):
-                    c[k] = self.foreign_penta_trie[k]
-        return c
-
-    #?
-    def penta(self,tri,keys):
-        r = r'.*?/' + tri + r'/.*?'
-        print r
-        penta = {}
-        for k in keys:
-            if len(k.split('/')) == 5:
-                if re.match(r,k):
-                    penta[k] = self.foreign_penta_trie[k]
-        return penta
-    
-    def tri(self, tri, keys):
-        trigram = {}
-        trigram[tri] = self.foreign_penta_trie[tri]
-        return trigram
-
-#end FEATURE LISTING
-
-# PMI
-#    def compute_PMI(self,vertex,features):
-#        PMIs = {}
-#        for f in features.keys():
-#            PMIs[f] = numpy.log(
-
-
 # NEW FEATURE LISTING
 
     def uni_features(self,tri):
+        """
+        Create a dict entry for the center word of the trigram
+        """
         t = tri.split('/')
         dict = {}
         dict[t[1]] = self.foreign_penta_trie[t[1]]
+        return dict
+    
+    def bi_features(self,tri,key):
+        """
+        For a given vertex and a key from the trie, test if it matches
+        against one or more of the bigram features. 
+        the bigram features are:
+            left context
+            right context
+            trigram - center word
+        """
+        t = tri.split('/')
+        dict = {}
+
+        #create regexes
+        r1 = r'^([^/]*?' + '/' + t[0]+r')$' # left context
+        r2 = r'^('+ t[2] + '/' + r'[^/]*?)$' # right context
+        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r')$' # tri - center
+
+        #test if key matches left or right context regex
+        try:
+            if re.match(r1,key) or re.match(r2,key):
+                try:
+                    dict[key] += self.foreign_penta_trie[key]
+                except KeyError:
+                    dict[key] = self.foreign_penta_trie[key]
+        except sre_constants.error:
+            print "unexpected end of pattern"
+            print "re1 = " + re1
+            print "re2 = " + re2
+            print "key = " + key
+
+        #test if key matches trigram - center word regex
+        if            k2 = key.split('/')
+ re.match(r3,key):
+            k3 = str(k2[0])+'/'+str(k2[2])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
+        return dict
+
+    def tri_features(self,tri,key):
+        """
+        For a given vertex and a key from the trie, test if it matches
+        against one or more of the trigram features. 
+        the trigram features are:
+            trigram
+            left context + right word
+            left word + right context
+        """
+        t = tri.split('/')
+        dict = {}
+
+        #create regexes
+        r1 = r'^'+ tri + r'$'# trigram
+        r2 = r'^([^/]*?/'+ t[0] + r'/[^/]*?/[^/]*?)$' # left context, right word
+        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r'/[^/]*?)$' # left word, right context
+        
+        #test if key matches trigram regex
+        if (re.match(r1,key)):
+            try:
+                dict[key] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[key] = self.foreign_penta_trie[key]
+        
+        #test if key matches left context + right word regex
+        if (re.match(r2,key)):
+            k2 = key.split('/')
+            k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
+
+        #test if key matches left word + right context regex
+        if (re.match(r3,key)):
+            k2 = key.split('/')
+            k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
         return dict
     
     def uni_cooccur(self,tri):
@@ -535,106 +468,83 @@ class Graphs:
         dict = {}
         dict[t[1]] = self.foreign_penta_trie[tri]
         return dict
-    
-    def bi_features(self,tri,keys):
+
+    def bi_cooccur(self,tri,key):
+        """
+        For a given vertex and a key from the trie, test if it cooccurs with 
+        one of the bigram features. 
+        the bigram features are:
+            left context
+            right context
+            trigram - center word
+        """
         t = tri.split('/')
         dict = {}
-        r1 = r'^([^/]*?' + '/' + t[0]+r')$' # left context
-        r2 = r'^('+ t[2] + '/' + r'[^/]*?)$' # right context
-        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r')$' # tri - center
-        for k in keys:
-            if (re.match(r1,k) or re.match(r2,k)):# and len(k.split('/')) == 2 :
-                    try:
-                        dict[k] += self.foreign_penta_trie[k]
-                    except KeyError:
-                        dict[k] = self.foreign_penta_trie[k]
-            if re.match(r3,k): #and len(k.split('/')) == 3:
-                    k2 = k.split('/')
-                    k3 = str(k2[0])+'/'+str(k2[2])
-                    try:
-                        dict[k3] += self.foreign_penta_trie[k]
-                    except KeyError:
-                        dict[k3] = self.foreign_penta_trie[k]
-        return dict
-    
-    def bi_cooccur(self,tri,keys):
-        t = tri.split('/')
-        dict = {}
+
+        #create regexes
         r1 = r'^([^/]*?' + '/' + tri+r')$' # left context
         r2 = r'^('+ tri + '/' + r'[^/]*?)$' # right context
         r3 = r'^(' + t[0] + '/' + t[1] + '/' + t[2] + r')$' # tri - center
-        for k in keys:
-            if (re.match(r1,k) or re.match(r2,k)):# and len(k.split('/')) == 2 :
-                try:
-                    dict[k] += self.foreign_penta_trie[k]
-                except KeyError:
-                    dict[k] = self.foreign_penta_trie[k]
-            if re.match(r3,k): #and len(k.split('/')) == 3:
-                k2 = k.split('/')
-                k3 = str(k2[0])+'/'+str(k2[2])
-                try:
-                    dict[k3] += self.foreign_penta_trie[k]
-                except KeyError:
-                    dict[k3] = self.foreign_penta_trie[k]
+
+        #test if key matches left or right context regex
+        if (re.match(r1,key) or re.match(r2,key)):
+            try:
+                dict[key] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[key] = self.foreign_penta_trie[key]
+
+        #test if key matches trigram - center word regex
+        if re.match(r3,key):
+            k2 = key.split('/')
+            k3 = str(k2[0])+'/'+str(k2[2])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
         return dict
 
-    def tri_features(self,tri,keys):
+    def tri_cooccur(self,tri,key):
+        """
+        For a given vertex and a key from the trie, test if it cooccurs with 
+        one of the trigram features. 
+        the trigram features are:
+            trigram
+            left context + right word
+            left word + right context
+        """
         t = tri.split('/')
         dict = {}
-        r1 = r'^'+ tri + r'$'# trigram
-        r2 = r'^([^/]*?/'+ t[0] + r'/[^/]*?/[^/]*?)$' # left context, right word
-        r3 = r'^(' + t[0] + '/' + r'[^/]*?' + '/' + t[2] + r'/[^/]*?)$' # left word, right context
-        for k in keys:
-            if (re.match(r1,k)):
-                    try:
-                        dict[k] += self.foreign_penta_trie[k]
-                    except KeyError:
-                        dict[k] = self.foreign_penta_trie[k]
-            if (re.match(r2,k)):
-                    k2 = k.split('/')
-                    k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
-                    try:
-                        dict[k3] += self.foreign_penta_trie[k]
-                    except KeyError:
-                        dict[k3] = self.foreign_penta_trie[k]
-            if (re.match(r3,k)):
-                    k2 = k.split('/')
-                    k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
-                    try:
-                        dict[k3] += self.foreign_penta_trie[k]
-                    except KeyError:
-                        dict[k3] = self.foreign_penta_trie[k]
-        return dict
-    
-    def tri_cooccur(self,tri,keys):
-        t = tri.split('/')
-        dict = {}
+
+        #create regexes
         r1 = r'^'+ tri + r'$'# trigram
         r2 = r'^([^/]*?/'+ tri +')$' # left context, right word
         r3 = r'^(' + tri + r'/[^/]*?)$' # left word, right context
-        for k in keys:
-            if (re.match(r1,k)):
-                try:
-                    dict[k] += self.foreign_penta_trie[k]
-                except KeyError:
-                    dict[k] = self.foreign_penta_trie[k]
-            if (re.match(r2,k)):
-                k2 = k.split('/')
-                k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
-                try:
-                    dict[k3] += self.foreign_penta_trie[k]
-                except KeyError:
-                    dict[k3] = self.foreign_penta_trie[k]
-            if (re.match(r3,k)):
-                k2 = k.split('/')
-                k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
-                try:
-                    dict[k3] += self.foreign_penta_trie[k]
-                except KeyError:
-                    dict[k3] = self.foreign_penta_trie[k]
-        return dict
-    
-    
+
+        #test if key matches trigram regex
+        if (re.match(r1,key)):
+            try:
+                dict[key] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[key] = self.foreign_penta_trie[key]
+
+        #test if key matches left context + right word regex
+        if (re.match(r2,key)):
+            k2 = key.split('/')
+            k3 = str(k2[0])+'/'+str(k2[1]) + '/' + str(k2[3])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
+
+        #test if key matches left word + right context regex
+        if (re.match(r3,key)):
+            k2 = key.split('/')
+            k3 = str(k2[0])+'/'+str(k2[2]) + '/' + str(k2[3])
+            try:
+                dict[k3] += self.foreign_penta_trie[key]
+            except KeyError:
+                dict[k3] = self.foreign_penta_trie[key]
+        return dict  
 # END NEW FEATURE LISTING
 
     def get_weight_matrix_all(self):
