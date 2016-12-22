@@ -13,6 +13,7 @@ import time
 import pygtrie as trie
 import pickle
 import re
+import gensim
 
 class Graphs:
     #limit data size (remove after development)
@@ -35,6 +36,7 @@ class Graphs:
 
     #The vectors that represent the trigrams from foreign_trigrams
     foreign_trigram_vectors = None
+    word2vec_vectors = None
 
     #the weight matrix
     w = None
@@ -72,16 +74,21 @@ class Graphs:
         self.foreign_penta_trie = self.create_penta_tries(for_filename)
         print "finsished in "+str(time.clock()-start)+"s"
         
-        print "create trigram vectors..."
-        start = time.clock()
+        #print "create trigram vectors..."
+        #start = time.clock()
         # self.foreign_trigram_vectors = self.create_feature_vectors(
         #     self.foreign_trigrams,self.foreign_penta_trie,self.total_unigrams)
-        self.foreign_trigram_vectors = self.create_trigram_vectors()
-        print "finsished in "+str(time.clock()-start)+"s"
+        #self.foreign_trigram_vectors = self.create_trigram_vectors()
+        #print "finsished in "+str(time.clock()-start)+"s"
         
+        print 'Creating vectors from trigrams with word2vec vectors'
+        start = time.clock()
+        self.word2vec_vectors = self.create_vectors_from_trigrams('pt_noempty')
+        print "finsished in "+str(time.clock()-start)+"s"
+
         print "create weight matrix..."
         start = time.clock()
-        self.w = self.create_weights(self.foreign_trigram_vectors)
+        self.w = self.create_weights_word2vec()
         print "finsished in "+str(time.clock()-start)+"s"
         
         print "create alignment matrix..."
@@ -202,6 +209,41 @@ class Graphs:
                     for key in set(vectors[key_a].keys()).intersection(set(vectors[key_b].keys())):
                         w[i,j] += vectors[key_a][key] + vectors[key_b][key]
                     w[j,i] = w[i,j]
+        return w
+
+    def create_vectors_from_trigrams(self,f):
+        vectors = {}
+        trigrams = self.foreign_trigrams
+        start = np.ones(128)*-1.0
+        end = np.ones(128)
+        model = gensim.models.Word2Vec.load(f)
+        for v in trigrams:
+            vector = np.empty(0)
+            for vi in v.split('/'):
+                if vi == '<s>':
+                    vector = np.concatenate((vector,start),axis=0)
+                elif vi == '<|s>':
+                    vector = np.concatenate((vector, end),axis=0)
+                else:
+                    vector = np.concatenate((vector, model[vi]),axis=0)
+            vectors[v] = vector
+        return vectors
+
+            
+    
+    def create_weights_word2vec(self):
+        """
+        calculates the weights between all the trigrams using their vectors
+        these are returned in a weight matrix
+        """
+        # vecs = np.array(vectors)
+        # w2 = 1.0 - np.dot(vecs/n(vecs,axis=1)[:,None],(vecs/n(vecs,axis=1)[:,None]).T)
+        w = np.zeros(len(self.foreign_trigrams)*len(self.foreign_trigrams)).reshape(len(self.foreign_trigrams),len(self.foreign_trigrams))
+        vectors = self.word2vec_vectors
+        trigrams = self.foreign_trigrams
+        for i,tri in enumerate(trigrams):
+            for j,tri2 in enumerate(trigrams):
+                w[i,j] = 1 - cosine(vectors[tri], vectors[tri2])
         return w
 
     def create_alignments(self,en_filename,for_filename,align_filename,en_wordlist,for_wordlist):
