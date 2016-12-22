@@ -16,7 +16,7 @@ import re
 
 class Graphs:
     #limit data size (remove after development)
-    max_lines = 100
+    max_lines = 500000
 
     #Total number of tokens in foreign corpus
     total_unigrams = 0
@@ -84,14 +84,18 @@ class Graphs:
         self.w = self.create_weights(self.foreign_trigram_vectors)
         print "finsished in "+str(time.clock()-start)+"s"
         
-        print "create allignment matrix..."
+        print "create alignment matrix..."
         start = time.clock()
         self.a = self.create_alignments(en_filename,for_filename,align_filename,
             self.english_wordlist,self.foreign_wordlist)
         print "finsished in "+str(time.clock()-start)+"s"
+        print "matrix a dimensions are: " + str(np.shape(a))
 
-        print "writing trie to file..."
-        pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
+        # print "writing trie to file..."
+        # pickle.dump(self.foreign_penta_trie,open("foreign_penta_50000.p","wb"))
+
+        # print "writing alignment matrix to file..."
+        # self.write_matrix_to_file(self.a,'alignment_matrix.txt')
         #test if left context right word works
 #        keys = self.foreign_penta_trie.keys()
 #        print self.foreign_trigrams[0]
@@ -405,14 +409,14 @@ class Graphs:
                 except KeyError:
                     dict[key] = self.foreign_penta_trie[key]
         except sre_constants.error:
-            print "unexpected end of pattern"
+            print "unexpected end of patern"
             print "re1 = " + re1
             print "re2 = " + re2
             print "key = " + key
 
         #test if key matches trigram - center word regex
-        if            k2 = key.split('/')
- re.match(r3,key):
+        if re.match(r3,key):
+            k2 = key.split('/')
             k3 = str(k2[0])+'/'+str(k2[2])
             try:
                 dict[k3] += self.foreign_penta_trie[key]
@@ -575,6 +579,14 @@ class Graphs:
 
     def get_english_wordlist(self):
         return self.english_wordlist
+
+    def write_matrix_to_file(self,matrix,matrixfile):
+        with open(matrixfile,'w') as fout:
+            for row in matrix:
+                for elem in row:
+                    fout.write(elem)
+                    fout.write(' ')
+                fout.write('\n')
 
     def export_to_dot_file(self):
         ind = np.sort(np.argpartition(self.w,-5,axis=1)[:,-5:],axis=1)
